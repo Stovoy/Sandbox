@@ -1,0 +1,6 @@
+/target
+*.jpg
+*.png
+*.svg
+.idea/
+

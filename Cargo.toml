@@ -1,0 +1,15 @@
+[package]
+name = "sandbox"
+version = "0.1.0"
+authors = ["Steve Mostovoy <stevemostovoysm@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+pixel-canvas = "0.2.1"
+image = "0.23.5"
+rand = "0.7.3"
+crossbeam = "0.7.3"
+colors-transform = "0.2.11"
+
+[profile.release]
+debug = true
