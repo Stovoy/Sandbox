@@ -10,6 +10,4 @@ image = "0.23.5"
 rand = "0.7.3"
 crossbeam = "0.7.3"
 colors-transform = "0.2.11"
-
-[profile.release]
-debug = true
+winit = "0.21.0"

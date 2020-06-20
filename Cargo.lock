@@ -1055,6 +1055,7 @@ dependencies = [
  "image",
  "pixel-canvas",
  "rand",
+ "winit",
 ]
 
 [[package]]
