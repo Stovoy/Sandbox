@@ -1,14 +1,46 @@
-use pixel_canvas::{Canvas};
-use pixel_canvas::input::{WindowEvent, Event};
-use winit::event::{MouseButton, ElementState, VirtualKeyCode};
-use std::thread;
-use std::time::Duration;
-use image::imageops::{resize, FilterType};
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 use rand::{thread_rng, Rng};
 use crossbeam::channel::{Sender, Receiver, unbounded};
 use rand::seq::SliceRandom;
-use colors_transform::{Rgb, Color};
-use pixel_canvas::canvas::CanvasInfo;
+use colors_transform::{Rgb, Color as ColorTransform};
+use web_sys::console;
+use std::cell::{RefCell, Cell};
+use std::rc::Rc;
+
+struct Renderer {
+    canvas: web_sys::HtmlCanvasElement,
+    context: web_sys::CanvasRenderingContext2d,
+}
+
+impl Renderer {
+    fn new() -> Self {
+        let canvas = document().get_element_by_id("canvas").unwrap();
+        let canvas: web_sys::HtmlCanvasElement = canvas
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .map_err(|_| ())
+            .unwrap();
+
+        let context = canvas
+            .get_context("2d")
+            .unwrap()
+            .unwrap()
+            .dyn_into::<web_sys::CanvasRenderingContext2d>()
+            .unwrap();
+
+        Self {
+            canvas,
+            context,
+        }
+    }
+
+    fn draw_point(&self, x: i32, y: i32, color: Color) {
+        self.context.begin_path();
+
+        self.context.set_fill_style(&JsValue::from_str(&format!("rgb({}, {}, {})", color.r, color.g, color.b)));
+        self.context.fill_rect(x.into(), y.into(), 1.0, 1.0);
+    }
+}
 
 #[derive(Clone, Eq, PartialEq, Debug, Copy)]
 pub enum Kind {
@@ -70,21 +102,15 @@ impl Particle {
 
 #[derive(PartialEq, Clone, Copy, Debug, Default)]
 struct Extra {
-    color: ParticleColor,
+    color: Color,
     energy: f64,
 }
 
 #[derive(PartialEq, Clone, Copy, Debug, Default)]
-struct ParticleColor {
+struct Color {
     r: u8,
     g: u8,
     b: u8,
-}
-
-impl ParticleColor {
-    fn to_canvas(&self) -> pixel_canvas::Color {
-        pixel_canvas::Color { r: self.r, g: self.g, b: self.b }
-    }
 }
 
 impl Extra {
@@ -99,7 +125,7 @@ impl Extra {
                 let rgb = Rgb::from(237.0, 201.0, 175.0);
                 let rgb = rgb.lighten(rng.gen_range(-4.0, 4.0));
                 Self {
-                    color: ParticleColor {
+                    color: Color {
                         r: rgb.get_red() as u8,
                         g: rgb.get_green() as u8,
                         b: rgb.get_blue() as u8,
@@ -109,7 +135,7 @@ impl Extra {
             }
             Kind::Plant => {
                 Self {
-                    color: ParticleColor {
+                    color: Color {
                         r: 0,
                         g: 200,
                         b: 0,
@@ -119,13 +145,13 @@ impl Extra {
             }
             Kind::Empty => {
                 Self {
-                    color: ParticleColor { r: 0, g: 0, b: 0 },
+                    color: Color { r: 0, g: 0, b: 0 },
                     energy: 0.0,
                 }
             }
             Kind::OutOfBounds => {
                 Self {
-                    color: ParticleColor { r: 0, g: 0, b: 0 },
+                    color: Color { r: 0, g: 0, b: 0 },
                     energy: 0.0,
                 }
             }
@@ -168,11 +194,23 @@ impl Sandbox {
     }
 
     fn init(&mut self) {
-        let image = image::open("picture.png").unwrap();
-        let image = resize(
-            &image, self.width as u32, self.height as u32, FilterType::Lanczos3);
-
-        for (x, y, pixel) in image.enumerate_pixels() {
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let particle = Particle {
+                    x,
+                    y,
+                    kind: Kind::Empty,
+                    extra: Extra {
+                        color: Color { r: 0, g: 0, b: 0 },
+                        energy: 0.0,
+                    },
+                    clock: 0,
+                };
+                self.world[y as usize][x as usize] = particle;
+                self.update_tx.send(Update { particle }).unwrap();
+            }
+        }
+        /*for (x, y, pixel) in image.enumerate_pixels() {
             let x = x as i32;
             let y = y as i32;
             let [r, g, b, _] = pixel.0;
@@ -184,7 +222,7 @@ impl Sandbox {
                     y,
                     kind: Kind::Sand,
                     extra: Extra {
-                        color: ParticleColor {
+                        color: Color {
                             r: rgb.get_red() as u8,
                             g: rgb.get_green() as u8,
                             b: rgb.get_blue() as u8,
@@ -199,7 +237,7 @@ impl Sandbox {
                     y,
                     kind: Kind::Empty,
                     extra: Extra {
-                        color: ParticleColor { r: 0, g: 0, b: 0 },
+                        color: Color { r: 0, g: 0, b: 0 },
                         energy: 0.0,
                     },
                     clock: 0,
@@ -207,7 +245,7 @@ impl Sandbox {
             };
             self.world[y as usize][x as usize] = particle;
             self.update_tx.send(Update { particle }).unwrap();
-        }
+        }*/
     }
 
     fn get(&self, x: i32, y: i32) -> Particle {
@@ -349,42 +387,58 @@ impl Sandbox {
     }
 }
 
-fn main() {
-    let width = 500;
-    let height = 500;
+#[wasm_bindgen]
+pub struct IntervalHandle {
+    interval_id: i32,
+    _closure: Closure<dyn FnMut()>,
+}
 
-    let canvas = Canvas::new(width, height)
-        .title("Sandbox")
-        .state(GuiState::new())
-        .input(GuiState::handle_input);
+impl Drop for IntervalHandle {
+    fn drop(&mut self) {
+        let window = web_sys::window().unwrap();
+        window.clear_interval_with_handle(self.interval_id);
+    }
+}
+
+fn window() -> web_sys::Window {
+    web_sys::window().expect("no global `window` exists")
+}
+
+fn request_animation_frame(f: &Closure<dyn FnMut()>) {
+    window()
+        .request_animation_frame(f.as_ref().unchecked_ref())
+        .expect("should register `requestAnimationFrame` OK");
+}
+
+fn document() -> web_sys::Document {
+    window()
+        .document()
+        .expect("should have a document on window")
+}
+
+#[wasm_bindgen]
+pub fn run() -> Result<IntervalHandle, JsValue> {
+    #[cfg(debug_assertions)]
+        console_error_panic_hook::set_once();
+
+    let renderer = Renderer::new();
+    let canvas = renderer.canvas.clone();
+
+    let width = 800;
+    let height = 800;
 
     let (update_tx, update_rx) = unbounded();
     let (event_tx, event_rx) = unbounded();
     let mut sandbox = Sandbox::new(width as i32, height as i32, update_tx, event_rx);
     sandbox.init();
 
-    thread::spawn(move || {
-        thread::sleep(Duration::from_secs(1));
-        loop {
-            sandbox.tick();
-            thread::sleep(Duration::from_millis(5));
-        }
-    });
+    let gui_state = Rc::new(Cell::new(GuiState::new()));
 
-    canvas.render(move |gui_state, image| {
-        let width = image.width() as usize;
-        loop {
-            match update_rx.try_recv() {
-                Ok(update) => {
-                    let new_color = update.particle.extra.color.to_canvas();
-                    image.chunks_mut(width)
-                         .nth(height - update.particle.y as usize - 1)
-                         .unwrap()[update.particle.x as usize] = new_color;
-                }
-                Err(_) => break,
-            }
-        }
+    let gui_state_tick = gui_state.clone();
+    let tick = Closure::wrap(Box::new(move || {
+        sandbox.tick();
 
+        let gui_state = gui_state_tick.get();
         if gui_state.down &&
             gui_state.x >= 0 && gui_state.x < width as i32 &&
             gui_state.y >= 0 && gui_state.y < height as i32 {
@@ -394,9 +448,75 @@ fn main() {
                 kind: gui_state.kind,
             }).unwrap();
         }
-    });
+    }) as Box<dyn FnMut()>);
+
+    let render = Rc::new(RefCell::new(None));
+    let render_clone = render.clone();
+
+    *render_clone.borrow_mut() = Some(Closure::wrap(Box::new(move || {
+        loop {
+            match update_rx.try_recv() {
+                Ok(update) => {
+                    let new_color = update.particle.extra.color;
+                    renderer.draw_point(update.particle.x, update.particle.y, new_color);
+                }
+                Err(_) => break,
+            }
+        }
+
+        request_animation_frame(render.borrow().as_ref().unwrap());
+    }) as Box<dyn FnMut()>));
+
+    request_animation_frame(render_clone.borrow().as_ref().unwrap());
+
+    let interval_id = window()
+        .set_interval_with_callback_and_timeout_and_arguments_0(
+            tick.as_ref().unchecked_ref(), 10)?;
+
+    {
+        let gui_state = gui_state.clone();
+        let closure = Closure::wrap(Box::new(move |_: web_sys::MouseEvent| {
+            let mut gui_state_inner = gui_state.get();
+            gui_state_inner.down = true;
+            gui_state.set(gui_state_inner);
+        }) as Box<dyn FnMut(_)>);
+
+        canvas.add_event_listener_with_callback("mousedown", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+
+    {
+        let gui_state = gui_state.clone();
+        let closure = Closure::wrap(Box::new(move |_: web_sys::MouseEvent| {
+            let mut gui_state_inner = gui_state.get();
+            gui_state_inner.down = false;
+            gui_state.set(gui_state_inner);
+        }) as Box<dyn FnMut(_)>);
+
+        canvas.add_event_listener_with_callback("mouseup", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+
+    {
+        let gui_state = gui_state.clone();
+        let closure = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
+            let mut gui_state_inner = gui_state.get();
+            gui_state_inner.x = event.offset_x();
+            gui_state_inner.y = event.offset_y();
+            gui_state.set(gui_state_inner);
+        }) as Box<dyn FnMut(_)>);
+
+        canvas.add_event_listener_with_callback("mousemove", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+
+    Ok(IntervalHandle {
+        interval_id,
+        _closure: tick,
+    })
 }
 
+#[derive(Copy, Clone)]
 pub struct GuiState {
     pub kind: Kind,
     pub x: i32,
@@ -415,7 +535,8 @@ impl GuiState {
         }
     }
 
-    /// Handle input for the mouse. For use with the `input` method.
+    /*
+
     pub fn handle_input(_: &CanvasInfo, gui_state: &mut GuiState, event: &Event<()>) -> bool {
         match event {
             Event::WindowEvent {
@@ -459,4 +580,5 @@ impl GuiState {
             _ => false,
         }
     }
+     */
 }

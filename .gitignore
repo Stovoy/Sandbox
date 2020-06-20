@@ -1,6 +1,7 @@
+node_modules
+/dist
 /target
-*.jpg
-*.png
-*.svg
+/pkg
+/wasm-pack.log
 .idea/
-
+.buildy/

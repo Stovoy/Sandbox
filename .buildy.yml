@@ -1,0 +1,19 @@
+deps:
+  watch:
+  - package.json
+  - package-lock.json
+  build:
+  - exec npm install
+
+sandbox:
+  depends_on:
+  - deps
+  watch:
+  - node_modules/
+  - static/
+  - src/
+  - js/
+  run:
+  - exec npm start
+  run_options:
+    incremental: false
