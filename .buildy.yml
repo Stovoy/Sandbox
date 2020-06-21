@@ -9,7 +9,6 @@ sandbox:
   depends_on:
   - deps
   watch:
-  - node_modules/
   - static/
   - src/
   - js/
