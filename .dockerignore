@@ -1,0 +1,10 @@
+*
+!js
+!src
+!static
+!benches
+!Cargo.toml
+!Cargo.lock
+!package.json
+!package-lock.json
+!webpack.config.js
