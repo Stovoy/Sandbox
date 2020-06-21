@@ -109,7 +109,7 @@ pub struct UserEvent {
     pub x: i32,
     pub y: i32,
     pub kind: Kind,
-    pub size: i32,
+    pub size: u32,
 }
 
 #[derive(Clone)]
@@ -284,7 +284,7 @@ impl Sandbox {
 
         match user_event {
                 Some(event) => {
-                    let size = event.size;
+                    let size = event.size as i32;
                     for x in -size..=size {
                         for y in -size..=size {
                             let x = x + event.x;

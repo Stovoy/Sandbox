@@ -98,7 +98,7 @@ pub fn run() -> Result<IntervalHandle, JsValue> {
                 x: gui_state.x,
                 y: gui_state.y,
                 kind: gui_state.kind,
-                size: 50,
+                size: gui_state.size,
             })
         } else {
             None
@@ -196,6 +196,8 @@ pub fn run() -> Result<IntervalHandle, JsValue> {
                 "1" => gui_state_inner.kind = Kind::Sand,
                 "2" => gui_state_inner.kind = Kind::Plant,
                 "e" => gui_state_inner.kind = Kind::Empty,
+                "+" => if gui_state_inner.size < width as u32 { gui_state_inner.size += 1 },
+                "-" => if gui_state_inner.size > 1 { gui_state_inner.size -= 1 },
                 _ => {}
             }
             gui_state.set(gui_state_inner);
@@ -217,6 +219,7 @@ pub(crate) struct GuiState {
     pub(crate) x: i32,
     pub(crate) y: i32,
     pub(crate) down: bool,
+    pub(crate) size: u32,
 }
 
 impl GuiState {
@@ -225,6 +228,7 @@ impl GuiState {
             kind: Kind::Sand,
             x: 0,
             y: 0,
+            size: 5,
             down: false,
         }
     }
