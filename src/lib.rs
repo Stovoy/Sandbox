@@ -1,13 +1,8 @@
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{JsCast, Clamped};
-use rand::{thread_rng, Rng};
-use crossbeam::channel::{Sender, unbounded};
-use rand::seq::SliceRandom;
-use colors_transform::{Rgb as ColorTransform};
 use std::cell::{RefCell, Cell};
 use std::rc::Rc;
-use crate::engine::{Kind, Color, UserEvent, Sandbox};
-use web_sys::console;
+use crate::engine::{Kind, UserEvent, Sandbox};
 
 pub mod engine;
 
@@ -193,6 +188,23 @@ pub fn run() -> Result<IntervalHandle, JsValue> {
         closure.forget();
     }
 
+    {
+        let gui_state = gui_state.clone();
+        let closure = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+            let mut gui_state_inner = gui_state.get();
+            match event.key().as_str() {
+                "1" => gui_state_inner.kind = Kind::Sand,
+                "2" => gui_state_inner.kind = Kind::Plant,
+                "e" => gui_state_inner.kind = Kind::Empty,
+                _ => {}
+            }
+            gui_state.set(gui_state_inner);
+        }) as Box<dyn FnMut(_)>);
+
+        document().add_event_listener_with_callback("keypress", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+
     Ok(IntervalHandle {
         interval_id,
         _closure: tick,
@@ -208,7 +220,6 @@ pub(crate) struct GuiState {
 }
 
 impl GuiState {
-    /// Create a MouseState. For use with the `state` method.
     pub fn new() -> Self {
         Self {
             kind: Kind::Sand,
@@ -217,51 +228,4 @@ impl GuiState {
             down: false,
         }
     }
-
-    /*
-
-    pub fn handle_input(_: &CanvasInfo, gui_state: &mut GuiState, event: &Event<()>) -> bool {
-        match event {
-            Event::WindowEvent {
-                event, ..
-            } => {
-                match event {
-                    WindowEvent::KeyboardInput { input, .. } => {
-                        match input.state {
-                            ElementState::Pressed => {
-                                match input.virtual_keycode.unwrap() {
-                                    VirtualKeyCode::Key1 => gui_state.kind = Kind::Sand,
-                                    VirtualKeyCode::Key2 => gui_state.kind = Kind::Plant,
-                                    VirtualKeyCode::Key0 => gui_state.kind = Kind::Empty,
-                                    _ => {}
-                                }
-                            }
-                            ElementState::Released => {}
-                        }
-                    }
-                    WindowEvent::CursorMoved { position, .. } => {
-                        let (x, y): (i32, i32) = (*position).into();
-
-                        gui_state.x = (x as f32 * 0.5) as i32;
-                        gui_state.y = (y as f32 * 0.5) as i32;
-                    }
-                    WindowEvent::MouseInput { button, state, .. } => {
-                        match button {
-                            MouseButton::Left => {
-                                match state {
-                                    ElementState::Pressed => gui_state.down = true,
-                                    ElementState::Released => gui_state.down = false,
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    _ => {}
-                }
-                true
-            }
-            _ => false,
-        }
-    }
-     */
 }

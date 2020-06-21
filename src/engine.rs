@@ -1,12 +1,6 @@
 use rand::{thread_rng, Rng};
-use std::mem::MaybeUninit;
-use crossbeam::channel::{Sender};
-use std::rc::Rc;
-use std::cell::RefCell;
 use rand::seq::SliceRandom;
 use colors_transform::{Rgb, Color as ColorTransform};
-use web_sys::console;
-use wasm_bindgen::JsValue;
 
 static OUT_OF_BOUNDS: Particle = Particle {
     kind: Kind::OutOfBounds,
@@ -129,7 +123,7 @@ pub struct Sandbox {
 struct SandboxView<'a> {
     x: i32,
     y: i32,
-    sandbox: &'a mut Sandbox
+    sandbox: &'a mut Sandbox,
 }
 
 impl<'a> SandboxView<'a> {
@@ -229,78 +223,85 @@ impl Sandbox {
                 let mut view = SandboxView {
                     x,
                     y,
-                    sandbox: self
+                    sandbox: self,
                 };
 
-                if current.kind == Kind::Sand {
-                    let dx = if rng.gen_bool(0.5) { -1 } else { 1 };
-                    let side = view.get(dx, 1);
-                    let below = view.get(0, 1);
-                    if below.kind == Kind::Empty {
-                        view.set(0, 1, current);
-                        view.set(0, 0, EMPTY);
-                    } else if side.kind == Kind::Empty {
-                        view.set(dx, 1, current);
-                        view.set(0, 0, EMPTY);
-                    } else {
-                        view.set(0, 0, current);
+                match current.kind {
+                    Kind::Sand => {
+                        let dx = if rng.gen_bool(0.5) { -1 } else { 1 };
+                        let side = view.get(dx, 1);
+                        let below = view.get(0, 1);
+                        if below.kind == Kind::Empty {
+                            view.set(0, 1, current);
+                            view.set(0, 0, EMPTY);
+                        } else if side.kind == Kind::Empty {
+                            view.set(dx, 1, current);
+                            view.set(0, 0, EMPTY);
+                        } else {
+                            view.set(0, 0, current);
+                        }
                     }
-                } else if current.kind == Kind::Plant {
-                    if current.extra.energy > 0.0 {
-                        let mut nearby = 0;
-                        for x in -2..=2 {
-                            for y in -2..=2 {
-                                if view.get(x, y).kind == Kind::Plant {
-                                    nearby += 1;
+                    Kind::Plant => {
+                        if current.extra.energy > 0.0 {
+                            let mut nearby = 0;
+                            for x in -2..=2 {
+                                for y in -2..=2 {
+                                    if view.get(x, y).kind == Kind::Plant {
+                                        nearby += 1;
+                                    }
                                 }
                             }
-                        }
 
-                        if nearby > 12 {
-                            view.set(0, 0, current.with_energy(0.0));
-                        } else if rng.gen_bool(current.extra.energy * 0.05) {
-                            let cost = 0.02;
-                            /*let mut growth_spots = [top_left, top_right, left, right, above];
-                            growth_spots.shuffle(&mut rng);
-                            for spot in growth_spots.iter() {
-                                if spot.kind == Kind::Empty {
-                                    self.set(
-                                        &spot.0,
-                                        current.1.with_energy(current.1.extra.energy - cost));
-                                    self.set(&current.0, current.1.with_energy(0.0));
-                                    break;
+                            if nearby > 20 {
+                                view.set(0, 0, current.with_energy(0.0));
+                            } else if rng.gen_bool(current.extra.energy * 0.05) {
+                                let cost = 0.02;
+                                let mut growth_spots = [
+                                    (-1, -1), (1, -1), (-1, 0), (1, 0), (0, -1)];
+                                growth_spots.shuffle(&mut rng);
+                                let mut grown = false;
+                                for point in growth_spots.iter() {
+                                    let spot = view.get(point.0, point.1);
+                                    if spot.kind == Kind::Empty {
+                                        view.set(point.0, point.1, current.with_energy(current.extra.energy - cost));
+                                        view.set(0, 0, current.with_energy(0.0));
+                                        grown = true;
+                                        break;
+                                    }
                                 }
-                            }*/
+                                if !grown {
+                                    view.set(0, 0, current.with_energy(current.extra.energy - cost / 2.0));
+                                }
+                            }
+                        } else {
+                            view.set(0, 0, current);
                         }
-                    } else {
-                        view.set(0, 0, current);
                     }
-                } else {
-                    view.set(0, 0, current);
+                    _ => view.set(0, 0, current),
                 }
             }
         }
 
         match user_event {
-            Some(event) => {
-                let size = event.size;
-                for x in -size..=size {
-                    for y in -size..=size {
-                        let x = x + event.x;
-                        let y = y + event.y;
-                        if self.is_out_of_bounds(x, y) {
-                            continue;
-                        }
+                Some(event) => {
+                    let size = event.size;
+                    for x in -size..=size {
+                        for y in -size..=size {
+                            let x = x + event.x;
+                            let y = y + event.y;
+                            if self.is_out_of_bounds(x, y) {
+                                continue;
+                            }
 
-                        self.set(x, y, Particle {
-                            kind: event.kind,
-                            extra: Extra::from(event.kind),
-                            clock: self.clock,
-                        });
+                            self.set(x, y, Particle {
+                                kind: event.kind,
+                                extra: Extra::from(event.kind),
+                                clock: self.clock,
+                            });
+                        }
                     }
                 }
-            }
-            None => {}
+                None => {}
         }
     }
 }

@@ -20,7 +20,6 @@ lto = true
 
 [dependencies]
 wasm-bindgen = "0.2.45"
-crossbeam = "0.7.3"
 colors-transform = "0.2.11"
 rand = { version = "0.7.3", features = ["wasm-bindgen"] }
 indexmap = "1.4.0"
