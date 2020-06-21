@@ -33,6 +33,7 @@ pub enum Kind {
     Sand,
     Plant,
     Fire,
+    Water,
     Empty,
     OutOfBounds,
 }
@@ -54,6 +55,12 @@ impl Particle {
             new.extra.energy = 1.0;
         }
         new.extra.update(self.kind);
+        new
+    }
+
+    fn new_extra(&self) -> Particle {
+        let mut new = self.clone();
+        new.extra = Extra::from(self.kind);
         new
     }
 }
@@ -112,6 +119,13 @@ impl Extra {
                     energy: 1.0,
                 }
             }
+            Kind::Water => {
+                let rgb = Rgb::from(0.0, 0.0, 200.0);
+                Self {
+                    color: Color::from_rgb(rgb),
+                    energy: 1.0,
+                }
+            }
             Kind::Empty | Kind::OutOfBounds => {
                 Self {
                     color: Color { r: 0, g: 0, b: 0 },
@@ -125,7 +139,7 @@ impl Extra {
         match kind {
             Kind::Fire => {
                 let rgb = self.color.to_rgb().set_lightness(self.energy * 80.0);
-                self.color = Color::from_rgb(rgb)
+                self.color = Color::from_rgb(rgb);
             }
             _ => {}
         }
@@ -269,7 +283,13 @@ impl Sandbox {
                         }
                     }
                     Kind::Plant => {
-                        if current.extra.energy > 0.0 {
+                        if rng.gen_bool(((current.extra.energy * 0.05) + 0.05) as f64) {
+                            let cost = 0.02;
+                            let mut growth_spots = [
+                                (-1, -1), (1, -1), (-1, 0), (1, 0), (0, -1)];
+                            growth_spots.shuffle(&mut rng);
+                            let mut grown = false;
+
                             let mut nearby = 0;
                             for x in -2..=2 {
                                 for y in -2..=2 {
@@ -279,26 +299,20 @@ impl Sandbox {
                                 }
                             }
 
-                            if nearby > 20 {
+                            for point in growth_spots.iter() {
+                                let spot = view.get(point.0, point.1);
+                                if spot.kind == Kind::Empty && nearby <= 20 && current.extra.energy > 0.0 && !grown {
+                                    view.set(point.0, point.1, current.with_energy(current.extra.energy - cost).new_extra());
+                                    grown = true;
+                                } else if spot.kind == Kind::Water {
+                                    view.set(point.0, point.1, current.with_energy(1.0).new_extra());
+                                    grown = true;
+                                }
+                            }
+                            if grown {
                                 view.set(0, 0, current.with_energy(0.0));
-                            } else if rng.gen_bool((current.extra.energy * 0.05) as f64) {
-                                let cost = 0.02;
-                                let mut growth_spots = [
-                                    (-1, -1), (1, -1), (-1, 0), (1, 0), (0, -1)];
-                                growth_spots.shuffle(&mut rng);
-                                let mut grown = false;
-                                for point in growth_spots.iter() {
-                                    let spot = view.get(point.0, point.1);
-                                    if spot.kind == Kind::Empty {
-                                        view.set(point.0, point.1, current.with_energy(current.extra.energy - cost));
-                                        view.set(0, 0, current.with_energy(0.0));
-                                        grown = true;
-                                        break;
-                                    }
-                                }
-                                if !grown {
-                                    view.set(0, 0, current.with_energy(current.extra.energy - cost / 2.0));
-                                }
+                            } else {
+                                view.set(0, 0, current.with_energy(current.extra.energy - cost / 2.0));
                             }
                         } else {
                             view.set(0, 0, current);
@@ -320,6 +334,20 @@ impl Sandbox {
                                     view.set(dx, dy, current.with_energy(1.0));
                                 }
                             }
+                        }
+                    }
+                    Kind::Water => {
+                        let dx = if rng.gen_bool(0.5) { -1 } else { 1 };
+                        let side = view.get(dx, 1);
+                        let below = view.get(0, 1);
+                        if below.kind == Kind::Empty || below.kind == Kind::Fire {
+                            view.set(0, 1, current);
+                            view.set(0, 0, EMPTY);
+                        } else if side.kind == Kind::Empty || below.kind == Kind::Fire {
+                            view.set(dx, 1, current);
+                            view.set(0, 0, EMPTY);
+                        } else {
+                            view.set(0, 0, current);
                         }
                     }
                     _ => view.set(0, 0, current),

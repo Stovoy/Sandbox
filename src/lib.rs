@@ -196,6 +196,7 @@ pub fn run() -> Result<IntervalHandle, JsValue> {
                 "1" => gui_state_inner.kind = Kind::Sand,
                 "2" => gui_state_inner.kind = Kind::Plant,
                 "3" => gui_state_inner.kind = Kind::Fire,
+                "4" => gui_state_inner.kind = Kind::Water,
                 "e" => gui_state_inner.kind = Kind::Empty,
                 "+" => if gui_state_inner.size < width as u32 { gui_state_inner.size += 1 },
                 "-" => if gui_state_inner.size > 1 { gui_state_inner.size -= 1 },
