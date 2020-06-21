@@ -32,6 +32,7 @@ static EMPTY: Particle = Particle {
 pub enum Kind {
     Sand,
     Plant,
+    Fire,
     Empty,
     OutOfBounds,
 }
@@ -44,7 +45,7 @@ pub struct Particle {
 }
 
 impl Particle {
-    fn with_energy(&self, energy: f64) -> Particle {
+    fn with_energy(&self, energy: f32) -> Particle {
         let mut new = self.clone();
         new.extra.energy = energy;
         if new.extra.energy < 0.0 {
@@ -52,14 +53,9 @@ impl Particle {
         } else if new.extra.energy > 1.0 {
             new.extra.energy = 1.0;
         }
+        new.extra.update(self.kind);
         new
     }
-}
-
-#[derive(PartialEq, Clone, Copy, Debug, Default)]
-pub struct Extra {
-    pub color: Color,
-    energy: f64,
 }
 
 #[derive(PartialEq, Clone, Copy, Debug, Default)]
@@ -67,6 +63,26 @@ pub struct Color {
     pub r: u8,
     pub g: u8,
     pub b: u8,
+}
+
+impl Color {
+    fn from_rgb(rgb: Rgb) -> Self {
+        Self {
+            r: rgb.get_red() as u8,
+            g: rgb.get_green() as u8,
+            b: rgb.get_blue() as u8,
+        }
+    }
+
+    fn to_rgb(&self) -> Rgb {
+        Rgb::from(self.r as f32, self.g as f32, self.b as f32)
+    }
+}
+
+#[derive(PartialEq, Clone, Copy, Debug, Default)]
+pub struct Extra {
+    pub color: Color,
+    energy: f32,
 }
 
 impl Extra {
@@ -77,21 +93,22 @@ impl Extra {
                 let rgb = Rgb::from(237.0, 201.0, 175.0);
                 let rgb = rgb.lighten(rng.gen_range(-4.0, 4.0));
                 Self {
-                    color: Color {
-                        r: rgb.get_red() as u8,
-                        g: rgb.get_green() as u8,
-                        b: rgb.get_blue() as u8,
-                    },
+                    color: Color::from_rgb(rgb),
                     energy: 0.0,
                 }
             }
             Kind::Plant => {
+                let rgb = Rgb::from(0.0, 200.0, 0.0);
+                let rgb = rgb.lighten(rng.gen_range(-4.0, 4.0));
                 Self {
-                    color: Color {
-                        r: 0,
-                        g: 200,
-                        b: 0,
-                    },
+                    color: Color::from_rgb(rgb),
+                    energy: 1.0,
+                }
+            }
+            Kind::Fire => {
+                let rgb = Rgb::from(200.0, 0.0, 0.0);
+                Self {
+                    color: Color::from_rgb(rgb),
                     energy: 1.0,
                 }
             }
@@ -101,6 +118,16 @@ impl Extra {
                     energy: 0.0,
                 }
             }
+        }
+    }
+
+    fn update(&mut self, kind: Kind) {
+        match kind {
+            Kind::Fire => {
+                let rgb = self.color.to_rgb().set_lightness(self.energy * 80.0);
+                self.color = Color::from_rgb(rgb)
+            }
+            _ => {}
         }
     }
 }
@@ -254,7 +281,7 @@ impl Sandbox {
 
                             if nearby > 20 {
                                 view.set(0, 0, current.with_energy(0.0));
-                            } else if rng.gen_bool(current.extra.energy * 0.05) {
+                            } else if rng.gen_bool((current.extra.energy * 0.05) as f64) {
                                 let cost = 0.02;
                                 let mut growth_spots = [
                                     (-1, -1), (1, -1), (-1, 0), (1, 0), (0, -1)];
@@ -277,31 +304,49 @@ impl Sandbox {
                             view.set(0, 0, current);
                         }
                     }
+                    Kind::Fire => {
+                        if current.extra.energy <= 0.0 {
+                            view.set(0, 0, EMPTY);
+                        } else {
+                            let cost = 0.1;
+                            view.set(0, 0, current.with_energy(current.extra.energy - cost));
+                            let dx = rng.gen_range(-1, 2);
+                            let dy = rng.gen_range(-1, 2);
+                            if dx != 0 || dy != 0 {
+                                let next = view.get(dx, dy);
+                                if next.kind == Kind::Empty {
+                                    view.set(dx, dy, current.with_energy(current.extra.energy - cost));
+                                } else if next.kind == Kind::Plant {
+                                    view.set(dx, dy, current.with_energy(1.0));
+                                }
+                            }
+                        }
+                    }
                     _ => view.set(0, 0, current),
                 }
             }
         }
 
         match user_event {
-                Some(event) => {
-                    let size = event.size as i32;
-                    for x in -size..=size {
-                        for y in -size..=size {
-                            let x = x + event.x;
-                            let y = y + event.y;
-                            if self.is_out_of_bounds(x, y) {
-                                continue;
-                            }
-
-                            self.set(x, y, Particle {
-                                kind: event.kind,
-                                extra: Extra::from(event.kind),
-                                clock: self.clock,
-                            });
+            Some(event) => {
+                let size = event.size as i32;
+                for x in -size..=size {
+                    for y in -size..=size {
+                        let x = x + event.x;
+                        let y = y + event.y;
+                        if self.is_out_of_bounds(x, y) {
+                            continue;
                         }
+
+                        self.set(x, y, Particle {
+                            kind: event.kind,
+                            extra: Extra::from(event.kind),
+                            clock: self.clock,
+                        });
                     }
                 }
-                None => {}
+            }
+            None => {}
         }
     }
 }

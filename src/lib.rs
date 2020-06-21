@@ -195,6 +195,7 @@ pub fn run() -> Result<IntervalHandle, JsValue> {
             match event.key().as_str() {
                 "1" => gui_state_inner.kind = Kind::Sand,
                 "2" => gui_state_inner.kind = Kind::Plant,
+                "3" => gui_state_inner.kind = Kind::Fire,
                 "e" => gui_state_inner.kind = Kind::Empty,
                 "+" => if gui_state_inner.size < width as u32 { gui_state_inner.size += 1 },
                 "-" => if gui_state_inner.size > 1 { gui_state_inner.size -= 1 },
@@ -228,7 +229,7 @@ impl GuiState {
             kind: Kind::Sand,
             x: 0,
             y: 0,
-            size: 5,
+            size: 25,
             down: false,
         }
     }
