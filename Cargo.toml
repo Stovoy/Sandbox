@@ -1,6 +1,6 @@
 [package]
-name = "sandbox-client"
-description = "Sandbox Client"
+name = "sandbox"
+description = "Sandbox"
 version = "0.1.0"
 authors = ["Steve Mostovoy <stevemostovoysm@gmail.com>"]
 categories = ["wasm"]
@@ -8,7 +8,7 @@ readme = "README.md"
 edition = "2018"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [profile.dev]
 opt-level = 3
@@ -23,6 +23,7 @@ wasm-bindgen = "0.2.45"
 crossbeam = "0.7.3"
 colors-transform = "0.2.11"
 rand = { version = "0.7.3", features = ["wasm-bindgen"] }
+indexmap = "1.4.0"
 
 [dependencies.web-sys]
 version = "0.3.22"
@@ -35,6 +36,7 @@ features = [
     "Window",
     "MouseEvent",
     "KeyboardEvent",
+    "ImageData",
 ]
 
 [target."cfg(debug_assertions)".dependencies]
@@ -45,3 +47,8 @@ wasm-bindgen-test = "0.2.45"
 futures = "0.1.27"
 js-sys = "0.3.22"
 wasm-bindgen-futures = "0.3.22"
+criterion = "0.3"
+
+[[bench]]
+name = "benchmarks"
+harness = false

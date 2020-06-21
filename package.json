@@ -1,6 +1,6 @@
 {
   "author": "Steve Mostovoy <stevemostovoysm@gmail.com>",
-  "name": "sandbox-client",
+  "name": "sandbox",
   "version": "0.1.0",
   "scripts": {
     "build": "rimraf dist pkg && webpack",
