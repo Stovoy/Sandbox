@@ -1,9 +1,9 @@
 use rand::{thread_rng, Rng};
 use rand::seq::SliceRandom;
 use colors_transform::{Rgb, Color as ColorTransform};
-use crate::scripting;
 use std::rc::Rc;
 use std::cell::RefCell;
+use crate::scripting::ScriptEngine;
 
 static OUT_OF_BOUNDS: Particle = Particle {
     kind: Kind::OutOfBounds,
@@ -31,7 +31,7 @@ pub(crate) static EMPTY: Particle = Particle {
     clock: 0,
 };
 
-#[derive(Clone, Eq, PartialEq, Debug, Copy)]
+#[derive(Clone, Eq, PartialEq, Debug, Copy, Hash)]
 pub enum Kind {
     Sand = 0,
     Plant = 1,
@@ -237,6 +237,7 @@ pub struct Sandbox {
     width: i32,
     height: i32,
     world: Rc<RefCell<World>>,
+    script_engine: ScriptEngine,
 }
 
 #[derive(Clone)]
@@ -263,12 +264,13 @@ impl Sandbox {
             }
         }
 
-        let world = Rc::new(RefCell::new(world));;
+        let world = Rc::new(RefCell::new(world));
 
         let sandbox = Self {
             width,
             height,
             world,
+            script_engine: ScriptEngine::new(),
         };
 
         sandbox
@@ -305,7 +307,7 @@ impl Sandbox {
 
                 match current.kind {
                     Kind::Sand => {
-                        scripting::update_sand(view).unwrap();
+                        self.script_engine.run(view, current.kind).unwrap();
                     }
                     Kind::Plant => {
                         if rng.gen_bool(((current.extra.energy * 0.05) + 0.05) as f64) {
