@@ -24,6 +24,7 @@ colors-transform = "0.2.11"
 rand = { version = "0.7.3", features = ["wasm-bindgen"] }
 indexmap = "1.4.0"
 console_error_panic_hook = "0.1.5"
+rhai = { version = "0.15.1", features = ["only_i32"] }
 
 [dependencies.web-sys]
 version = "0.3.22"

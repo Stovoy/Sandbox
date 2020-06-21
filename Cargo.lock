@@ -237,6 +237,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "instant"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7777a24a1ce5de49fcdde84ec46efa487c3af49d5b6e6e0a50367cc5c1096182"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "itertools"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -472,6 +483,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26412eb97c6b088a6997e05f69403a802a92d520de2f8e63c2b65f9e0f47c4e8"
 
 [[package]]
+name = "rhai"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c5b0b8ea9425657b9b8487c66253b4eb3321e30e35df062b69d11e2ea60100f"
+dependencies = [
+ "instant",
+ "num-traits",
+]
+
+[[package]]
 name = "rustc_version"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -506,6 +527,7 @@ dependencies = [
  "indexmap",
  "js-sys",
  "rand",
+ "rhai",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",

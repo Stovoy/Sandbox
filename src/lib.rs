@@ -5,6 +5,7 @@ use std::rc::Rc;
 use crate::engine::{Kind, UserEvent, Sandbox};
 
 pub mod engine;
+pub mod scripting;
 
 struct Renderer {
     canvas: web_sys::HtmlCanvasElement,

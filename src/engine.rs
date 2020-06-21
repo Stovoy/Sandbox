@@ -1,6 +1,9 @@
 use rand::{thread_rng, Rng};
 use rand::seq::SliceRandom;
 use colors_transform::{Rgb, Color as ColorTransform};
+use crate::scripting;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 static OUT_OF_BOUNDS: Particle = Particle {
     kind: Kind::OutOfBounds,
@@ -15,7 +18,7 @@ static OUT_OF_BOUNDS: Particle = Particle {
     clock: 0,
 };
 
-static EMPTY: Particle = Particle {
+pub(crate) static EMPTY: Particle = Particle {
     kind: Kind::Empty,
     extra: Extra {
         color: Color {
@@ -30,22 +33,32 @@ static EMPTY: Particle = Particle {
 
 #[derive(Clone, Eq, PartialEq, Debug, Copy)]
 pub enum Kind {
-    Sand,
-    Plant,
-    Fire,
-    Water,
-    Empty,
-    OutOfBounds,
+    Sand = 0,
+    Plant = 1,
+    Fire = 2,
+    Water = 3,
+    Empty = 4,
+    OutOfBounds = 5,
+}
+
+impl Kind {
+    pub(crate) fn value(&self) -> i32 {
+        *self as i32
+    }
 }
 
 #[derive(Clone, PartialEq, Debug, Copy)]
 pub struct Particle {
-    kind: Kind,
+    pub kind: Kind,
     pub extra: Extra,
     clock: u8,
 }
 
 impl Particle {
+    pub(crate) fn get_kind(&mut self) -> i32 {
+        self.kind.value()
+    }
+
     fn with_energy(&self, energy: f32) -> Particle {
         let mut new = self.clone();
         new.extra.energy = energy;
@@ -153,34 +166,77 @@ pub struct UserEvent {
     pub size: u32,
 }
 
-#[derive(Clone)]
-pub struct Sandbox {
+pub struct World {
     width: i32,
     height: i32,
-    world: Vec<Particle>,
+    data: Vec<Particle>,
     clock: u8,
 }
 
-struct SandboxView<'a> {
-    x: i32,
-    y: i32,
-    sandbox: &'a mut Sandbox,
+impl World {
+    fn new(width: i32, height: i32) -> Self {
+        let data = vec![OUT_OF_BOUNDS; (width * height) as usize];
+        Self {
+            width,
+            height,
+            data,
+            clock: 0,
+        }
+    }
+
+    fn is_out_of_bounds(&self, x: i32, y: i32) -> bool {
+        x < 0 || x >= self.width || y < 0 || y >= self.height
+    }
+
+    fn get_index(&self, x: i32, y: i32) -> usize {
+        return (x + y * self.height) as usize;
+    }
+
+    fn get(&self, x: i32, y: i32) -> Particle {
+        if self.is_out_of_bounds(x, y) {
+            OUT_OF_BOUNDS
+        } else {
+            self.data[self.get_index(x, y)]
+        }
+    }
+
+    fn set(&mut self, x: i32, y: i32, particle: Particle) {
+        if self.is_out_of_bounds(x, y) {
+            return;
+        }
+        let index = self.get_index(x, y);
+        self.data[index] = particle;
+        self.data[index].clock = self.clock;
+    }
 }
 
-impl<'a> SandboxView<'a> {
-    fn get(&self, d_x: i32, d_y: i32) -> Particle {
+#[derive(Clone)]
+pub(crate) struct WorldView {
+    x: i32,
+    y: i32,
+    world: Rc<RefCell<World>>,
+}
+
+impl WorldView {
+    pub(crate) fn get(&mut self, d_x: i32, d_y: i32) -> Particle {
         let x = self.x + d_x;
         let y = self.y + d_y;
 
-        self.sandbox.get(x, y)
+        self.world.borrow().get(x, y)
     }
 
-    fn set(&mut self, d_x: i32, d_y: i32, particle: Particle) {
+    pub(crate) fn set(&mut self, d_x: i32, d_y: i32, particle: Particle) {
         let x = self.x + d_x;
         let y = self.y + d_y;
 
-        self.sandbox.set(x, y, particle);
+        self.world.borrow_mut().set(x, y, particle);
     }
+}
+
+pub struct Sandbox {
+    width: i32,
+    height: i32,
+    world: Rc<RefCell<World>>,
 }
 
 #[derive(Clone)]
@@ -192,17 +248,11 @@ pub struct ParticlePoint {
 
 impl Sandbox {
     pub fn new(width: i32, height: i32) -> Self {
-        let world = vec![OUT_OF_BOUNDS; (width * height) as usize];
-        let mut sandbox = Self {
-            width,
-            height,
-            world,
-            clock: 0,
-        };
+        let mut world = World::new(width, height);
 
         for x in 0..width {
             for y in 0..height {
-                sandbox.set(
+                world.set(
                     x, y,
                     Particle {
                         kind: Kind::Empty,
@@ -213,74 +263,49 @@ impl Sandbox {
             }
         }
 
+        let world = Rc::new(RefCell::new(world));;
+
+        let sandbox = Self {
+            width,
+            height,
+            world,
+        };
+
         sandbox
     }
 
-    fn get_index(&self, x: i32, y: i32) -> usize {
-        return (x + y * self.height) as usize;
-    }
-
-    fn is_out_of_bounds(&self, x: i32, y: i32) -> bool {
-        x < 0 || x >= self.width || y < 0 || y >= self.height
-    }
-
     pub fn world(&self) -> *const Particle {
-        self.world.as_ptr()
-    }
-
-    fn get(&self, x: i32, y: i32) -> Particle {
-        if self.is_out_of_bounds(x, y) {
-            OUT_OF_BOUNDS
-        } else {
-            self.world[self.get_index(x, y)].clone()
-        }
-    }
-
-    fn set(&mut self, x: i32, y: i32, particle: Particle) {
-        let index = self.get_index(x, y);
-        self.world[index] = particle;
-        self.world[index].clock = self.clock;
+        self.world.borrow().data.as_ptr()
     }
 
     pub fn tick(&mut self, user_event: Option<UserEvent>) {
-        let (clock, _) = self.clock.overflowing_add(1);
-        self.clock = clock;
+        let (clock, _) = self.world.borrow().clock.overflowing_add(1);
+        self.world.borrow_mut().clock = clock;
 
         let mut rng = thread_rng();
 
         for x in 0..self.width {
-            let x = if self.clock % 2 == 0 {
+            let x = if clock % 2 == 0 {
                 self.width - (1 + x)
             } else {
                 x
             };
 
             for y in 0..self.height {
-                let current = self.get(x, y);
+                let current = self.world.borrow().get(x, y);
                 if current.kind == Kind::Empty || current.clock == clock {
                     continue;
                 }
 
-                let mut view = SandboxView {
+                let mut view = WorldView {
                     x,
                     y,
-                    sandbox: self,
+                    world: self.world.clone(),
                 };
 
                 match current.kind {
                     Kind::Sand => {
-                        let dx = if rng.gen_bool(0.5) { -1 } else { 1 };
-                        let side = view.get(dx, 1);
-                        let below = view.get(0, 1);
-                        if below.kind == Kind::Empty {
-                            view.set(0, 1, current);
-                            view.set(0, 0, EMPTY);
-                        } else if side.kind == Kind::Empty {
-                            view.set(dx, 1, current);
-                            view.set(0, 0, EMPTY);
-                        } else {
-                            view.set(0, 0, current);
-                        }
+                        scripting::update_sand(view).unwrap();
                     }
                     Kind::Plant => {
                         if rng.gen_bool(((current.extra.energy * 0.05) + 0.05) as f64) {
@@ -362,14 +387,11 @@ impl Sandbox {
                     for y in -size..=size {
                         let x = x + event.x;
                         let y = y + event.y;
-                        if self.is_out_of_bounds(x, y) {
-                            continue;
-                        }
 
-                        self.set(x, y, Particle {
+                        self.world.borrow_mut().set(x, y, Particle {
                             kind: event.kind,
                             extra: Extra::from(event.kind),
-                            clock: self.clock,
+                            clock,
                         });
                     }
                 }
