@@ -19,15 +19,17 @@ lto = true
 [features]
 
 [dependencies]
-wasm-bindgen = "0.2.45"
+wasm-bindgen = "0.2.68"
 colors-transform = "0.2.11"
 rand = { version = "0.7.3", features = ["wasm-bindgen"] }
 indexmap = "1.4.0"
 console_error_panic_hook = "0.1.5"
 rhai = { version = "0.15.1", features = ["only_i32"] }
+walrus = "0.18.0"
+js-sys = "0.3.45"
 
 [dependencies.web-sys]
-version = "0.3.22"
+version = "0.3.45"
 features = [
     "console",
     "CanvasRenderingContext2d",
@@ -41,10 +43,9 @@ features = [
 ]
 
 [dev-dependencies]
-wasm-bindgen-test = "0.2.45"
+wasm-bindgen-test = "0.3.18"
 futures = "0.1.27"
-js-sys = "0.3.22"
-wasm-bindgen-futures = "0.3.22"
+wasm-bindgen-futures = "0.4.18"
 criterion = "0.3"
 
 [[bench]]

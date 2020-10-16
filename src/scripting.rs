@@ -1,10 +1,11 @@
 use rhai::{Engine, EvalAltResult, Scope, RegisterFn, AST};
-use crate::engine::{EMPTY, Particle, WorldView, Kind, World};
+use crate::engine::{EMPTY, Particle, WorldView, Kind};
 use rand::{thread_rng, Rng};
 use rand::prelude::ThreadRng;
-use std::collections::HashMap;
-use std::cell::RefCell;
-use std::rc::Rc;
+use wasm_bindgen::prelude::*;
+use walrus::ir::*;
+use walrus::{FunctionBuilder, Module, ModuleConfig, ValType};
+use wasm_bindgen::JsCast;
 
 pub struct ScriptEngine {
     engine: Engine,
@@ -29,6 +30,108 @@ impl ScriptEngine {
         engine.register_type::<ThreadRng>();
         engine.register_fn("gen_bool", ThreadRng::gen_bool);
 
+        // Construct a new Walrus module.
+        let config = ModuleConfig::new();
+        let mut module = Module::with_config(config);
+
+        // Building this factorial implementation:
+        // https://github.com/WebAssembly/testsuite/blob/7816043/fac.wast#L46-L66
+        let mut factorial = FunctionBuilder::new(&mut module.types, &[ValType::I32], &[ValType::I32]);
+
+        // Create our paramter and our two locals.
+        let n = module.locals.add(ValType::I32);
+        let i = module.locals.add(ValType::I32);
+        let res = module.locals.add(ValType::I32);
+
+        factorial
+            // Enter the function's body.
+            .func_body()
+            // (local.set $i (local.get $n))
+            .local_get(n)
+            .local_set(i)
+            // (local.set $res (i32.const 1))
+            .i32_const(100)
+            .local_set(res)
+            .block(None, |done| {
+                let done_id = done.id();
+                done.loop_(None, |loop_| {
+                    let loop_id = loop_.id();
+                    loop_
+                        // (i32.eq (local.get $i) (i32.const 0))
+                        .local_get(i)
+                        .i32_const(0)
+                        .binop(BinaryOp::I32Eq)
+                        .if_else(
+                            None,
+                            |then| {
+                                // (then (br $done))
+                                then.br(done_id);
+                            },
+                            |else_| {
+                                else_
+                                    // (local.set $res (i32.mul (local.get $i) (local.get $res)))
+                                    .i32_const(100)
+                                    .local_get(res)
+                                    .binop(BinaryOp::I32Mul)
+                                    .local_set(res)
+                                    // (local.set $i (i32.sub (local.get $i) (i32.const 1))))
+                                    .local_get(i)
+                                    .i32_const(1)
+                                    .binop(BinaryOp::I32Sub)
+                                    .local_set(i);
+                            },
+                        )
+                        .br(loop_id);
+                });
+            })
+            .local_get(res);
+
+        let factorial = factorial.finish(vec![n], &mut module.funcs);
+
+        // Export the `factorial` function.
+        module.exports.add("factorial", factorial);
+
+        // Faster way than doing reflection
+        // https://github.com/rustwasm/wasm-bindgen/issues/1428
+        let wasm_bytes = module.emit_wasm();
+        let descriptor = &js_sys::Object::new();
+        js_sys::Reflect::set(&descriptor, &"initial".into(), &JsValue::from(256)).unwrap();
+        js_sys::Reflect::set(&descriptor, &"maximum".into(), &JsValue::from(256)).unwrap();
+        let memory = js_sys::WebAssembly::Memory::new(&descriptor).unwrap();
+        let import_object = &js_sys::Object::new();
+        let env_object = &js_sys::Object::new();
+        let table_descriptor = &js_sys::Object::new();
+        js_sys::Reflect::set(&table_descriptor, &"initial".into(), &JsValue::from(0)).unwrap();
+        js_sys::Reflect::set(&table_descriptor, &"maximum".into(), &JsValue::from(0)).unwrap();
+        js_sys::Reflect::set(&table_descriptor, &"element".into(), &JsValue::from("anyfunc")).unwrap();
+        js_sys::Reflect::set(&env_object, &"table".into(),
+                             &js_sys::WebAssembly::Table::new(&table_descriptor).unwrap()).unwrap();
+        js_sys::Reflect::set(&env_object, &"tableBase".into(), &JsValue::from(0)).unwrap();
+        js_sys::Reflect::set(&env_object, &"memory".into(), &memory).unwrap();
+        js_sys::Reflect::set(&env_object, &"memoryBase".into(), &JsValue::from(1024)).unwrap();
+        js_sys::Reflect::set(&env_object, &"STACKTOP".into(), &JsValue::from(0)).unwrap();
+        js_sys::Reflect::set(&env_object, &"STACK_MAX".into(), &JsValue::from(256)).unwrap();
+        js_sys::Reflect::set(&import_object, &"env".into(), env_object).unwrap();
+
+        let promise = js_sys::WebAssembly::instantiate_buffer(&*wasm_bytes, import_object);
+        let closure = Closure::wrap(Box::new(move |result| {
+            let value = js_sys::Reflect::get(
+                &result,
+                &JsValue::from_str("instance")).unwrap();
+            web_sys::console::log_1(&value);
+            let exports = js_sys::Reflect::get(&value, &"exports".into()).unwrap();
+            let factorial = js_sys::Reflect::get(&exports, &"factorial".into()).unwrap();
+            let factorial = factorial.unchecked_into::<js_sys::Function>();
+            let result = js_sys::Reflect::apply(&factorial, &JsValue::null(), &js_sys::Array::new()).unwrap();
+            web_sys::console::log_1(&result);
+        }) as Box<dyn FnMut(_)>);
+
+        let _ = promise.then(&closure);
+
+        // Note: This leaks memory, don't want to do this on every compliation.
+        closure.forget();
+
+        // js_sys::WebAssembly::compile()
         let script = engine.compile(r"
             for x in range(0, width) {
                 let x = if clock % 2 == 0 {

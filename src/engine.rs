@@ -1,5 +1,4 @@
 use rand::{thread_rng, Rng};
-use rand::seq::SliceRandom;
 use colors_transform::{Rgb, Color as ColorTransform};
 use std::rc::Rc;
 use std::cell::RefCell;
