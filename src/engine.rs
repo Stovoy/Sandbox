@@ -59,6 +59,10 @@ impl Particle {
         self.kind.value()
     }
 
+    pub(crate) fn get_clock(&mut self) -> i32 {
+        self.clock as i32
+    }
+
     fn with_energy(&self, energy: f32) -> Particle {
         let mut new = self.clone();
         new.extra.energy = energy;
@@ -231,6 +235,11 @@ impl WorldView {
 
         self.world.borrow_mut().set(x, y, particle);
     }
+
+    pub(crate) fn set_viewport(&mut self, x: i32, y: i32) {
+        self.x = x;
+        self.y = y;
+    }
 }
 
 pub struct Sandbox {
@@ -284,103 +293,12 @@ impl Sandbox {
         let (clock, _) = self.world.borrow().clock.overflowing_add(1);
         self.world.borrow_mut().clock = clock;
 
-        let mut rng = thread_rng();
+        let mut view = WorldView {
+            x: 0, y: 0,
+            world: self.world.clone(),
+        };
 
-        for x in 0..self.width {
-            let x = if clock % 2 == 0 {
-                self.width - (1 + x)
-            } else {
-                x
-            };
-
-            for y in 0..self.height {
-                let current = self.world.borrow().get(x, y);
-                if current.kind == Kind::Empty || current.clock == clock {
-                    continue;
-                }
-
-                let mut view = WorldView {
-                    x,
-                    y,
-                    world: self.world.clone(),
-                };
-
-                match current.kind {
-                    Kind::Sand => {
-                        self.script_engine.run(view, current.kind).unwrap();
-                    }
-                    Kind::Plant => {
-                        if rng.gen_bool(((current.extra.energy * 0.05) + 0.05) as f64) {
-                            let cost = 0.02;
-                            let mut growth_spots = [
-                                (-1, -1), (1, -1), (-1, 0), (1, 0), (0, -1)];
-                            growth_spots.shuffle(&mut rng);
-                            let mut grown = false;
-
-                            let mut nearby = 0;
-                            for x in -2..=2 {
-                                for y in -2..=2 {
-                                    if view.get(x, y).kind == Kind::Plant {
-                                        nearby += 1;
-                                    }
-                                }
-                            }
-
-                            for point in growth_spots.iter() {
-                                let spot = view.get(point.0, point.1);
-                                if spot.kind == Kind::Empty && nearby <= 20 && current.extra.energy > 0.0 && !grown {
-                                    view.set(point.0, point.1, current.with_energy(current.extra.energy - cost).new_extra());
-                                    grown = true;
-                                } else if spot.kind == Kind::Water {
-                                    view.set(point.0, point.1, current.with_energy(1.0).new_extra());
-                                    grown = true;
-                                }
-                            }
-                            if grown {
-                                view.set(0, 0, current.with_energy(0.0));
-                            } else {
-                                view.set(0, 0, current.with_energy(current.extra.energy - cost / 2.0));
-                            }
-                        } else {
-                            view.set(0, 0, current);
-                        }
-                    }
-                    Kind::Fire => {
-                        if current.extra.energy <= 0.0 {
-                            view.set(0, 0, EMPTY);
-                        } else {
-                            let cost = 0.1;
-                            view.set(0, 0, current.with_energy(current.extra.energy - cost));
-                            let dx = rng.gen_range(-1, 2);
-                            let dy = rng.gen_range(-1, 2);
-                            if dx != 0 || dy != 0 {
-                                let next = view.get(dx, dy);
-                                if next.kind == Kind::Empty {
-                                    view.set(dx, dy, current.with_energy(current.extra.energy - cost));
-                                } else if next.kind == Kind::Plant {
-                                    view.set(dx, dy, current.with_energy(1.0));
-                                }
-                            }
-                        }
-                    }
-                    Kind::Water => {
-                        let dx = if rng.gen_bool(0.5) { -1 } else { 1 };
-                        let side = view.get(dx, 1);
-                        let below = view.get(0, 1);
-                        if below.kind == Kind::Empty || below.kind == Kind::Fire {
-                            view.set(0, 1, current);
-                            view.set(0, 0, EMPTY);
-                        } else if side.kind == Kind::Empty || below.kind == Kind::Fire {
-                            view.set(dx, 1, current);
-                            view.set(0, 0, EMPTY);
-                        } else {
-                            view.set(0, 0, current);
-                        }
-                    }
-                    _ => view.set(0, 0, current),
-                }
-            }
-        }
+        self.script_engine.tick(clock, self.width, self.height, view).unwrap();
 
         match user_event {
             Some(event) => {

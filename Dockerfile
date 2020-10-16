@@ -11,7 +11,6 @@ COPY . ./
 RUN \
  --mount=type=cache,target=/usr/local/cargo/git \
  --mount=type=cache,target=/usr/local/cargo/registry \
- --mount=type=cache,target=/usr/local/cargo/bin \
  --mount=type=cache,target=/app/node_modules \
  --mount=type=cache,target=/app/target \
  --mount=type=cache,target=/app/.cargo \
@@ -23,6 +22,6 @@ RUN \
 
 FROM debian:buster@sha256:f19be6b8095d6ea46f5345e2651eec4e5ee9e84fc83f3bc3b73587197853dc9e
 WORKDIR /app
-ENTRYPOINT ["sfz", "-p", "1064"]
+ENTRYPOINT ["sfz", "-b", "0.0.0.0", "-p", "1064"]
 COPY --from=build /app/dist .
 COPY --from=build /usr/local/cargo/bin/sfz /usr/local/bin/sfz
